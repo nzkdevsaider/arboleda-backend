@@ -12,3 +12,7 @@ Backend de la aplicación Arboleda. Construido con [Deno](https://deno.land/) y 
 
 - [Deno](https://deno.land/)
 - [PostgreSQL](https://www.postgresql.org/)
+
+## Configuración
+
+- Editar el archivo `.env` con los datos de la base de datos.
