@@ -1,4 +1,5 @@
 import { oak, postgres, dotenv } from "../../deps.ts";
+import { error, success } from "../../utils/logger.ts";
 
 const routes = new oak.Router();
 const client = new postgres.Client({
@@ -12,25 +13,45 @@ const client = new postgres.Client({
 routes.post("/", async (ctx) => {
   await client.connect();
 
-  const body = await ctx.request.body({ type: "form-data" });
-  const params = await body.value.read();
+  const body = await ctx.request.body({ type: "json" });
+  const params = await body.value;
 
-  // Buscar el codigo de invitación en la base de datos
-  const result = await client.queryArray(
-    "SELECT * FROM invites WHERE invitecode = $1",
-    { 1: params.fields.invitecode }
-  );
-
-  // Si no existe el usuario o la contraseña es incorrecta
-  if (result.rows.length === 0) {
+  // Verificar si los campos están vacios o faltan campos requeridos.
+  if (
+    params.username === "" ||
+    params.password === "" ||
+    !params.username ||
+    !params.password
+  ) {
     ctx.response.status = 401;
-    ctx.response.body = "Código de invitación válido";
+    ctx.response.body = error(
+      `Los campos "username" y "password" son requeridos.`
+    );
     return;
   }
 
-  // Si existe el usuario y la contraseña es correcta
+  const result = await client.queryObject(
+    "SELECT * FROM users_accounts WHERE username = $1 AND password = $2",
+    {
+      1: params.username,
+      2: params.password,
+    }
+  );
+
+  if (result.rows.length === 0) {
+    ctx.response.status = 401;
+    ctx.response.body = error(`Usuario o contraseña incorrectos.`);
+    return;
+  }
+
+  const user = await client.queryObject("SELECT * FROM users WHERE id = $1", {
+    1: result.rows[0].id,
+  });
+
   ctx.response.status = 200;
-  ctx.response.body = "Código de invitación válido";
+  ctx.state.session.set("user", user.rows[0]);
+  ctx.response.body = success(user.rows[0]);
+  await client.end();
 });
 
 export default routes;

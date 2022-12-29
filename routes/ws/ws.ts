@@ -1,68 +1,47 @@
-import { oak, faker } from "../../deps.ts";
+import { oak, snowflake, momentjs } from "../../deps.ts";
+import { userJoin, userLeave, broadcast } from "../../utils/users.ts";
 
+const flakes = new snowflake.default();
 const routes = new oak.Router();
-const connectedClients = new Map();
+const moment = momentjs.default;
+moment.locale("es");
 
-function broadcast(message) {
-  for (const client of connectedClients.values()) {
-    client.send(message);
-  }
-}
-
-function broadcast_usernames() {
-  const usernames = [...connectedClients.keys()];
-  console.log(
-    "Enviando lista de usuarios a todos los usuarios: " + JSON.stringify(usernames)
-  );
-  broadcast(
-    JSON.stringify({
-      event: "update-users",
-      usernames: usernames,
-    })
-  );
-}
-
-routes.get("/chat", async (ctx) => {
+routes.get("/", async (ctx) => {
   const socket = await ctx.upgrade();
-  //const username = ctx.request.url.searchParams.get("username");
-  const username = faker.name.findName();
+  const user = (await ctx.state.session.get("user")) || "";
+  const socketId = flakes.generate();
 
-  if (connectedClients.has(username)) {
-    socket.close(1008, `El usuario ${username} ya existe.`);
+  if (!user) {
+    socket.close();
+    console.log("El usuario no está logueado, se cierra la conexión.");
     return;
   }
-  socket.username = username;
-  connectedClients.set(username, socket);
-  console.log(`Se ha conectado: ${username}`);
+
+  socket.id = socketId;
+  socket.userId = user.id;
 
   socket.onopen = () => {
-    broadcast_usernames();
+    console.log(`${user.username} conectado al socket ${socket.id}`);
+    userJoin(socket, user.id);
   };
 
   socket.onclose = () => {
-    console.log(`Se ha desconectado: ${socket.username}`);
-    connectedClients.delete(socket.username);
-    broadcast_usernames();
+    console.log(`${user.username} desconectado del socket ${socket.id}`);
+    userLeave(socket);
   };
 
-  // Mensaje
   socket.onmessage = (m) => {
     const data = JSON.parse(m.data);
+    console.log(data);
     switch (data.event) {
-      /* 
-        {
-            "event": "send-message",
-            "message": "Hola"
-        }
-        */
-
       case "send-message":
         broadcast(
           JSON.stringify({
             event: "send-message",
-            message: data.message,
-            user: {
-              username: socket.username,
+            user,
+            messageData: {
+              message: data.message,
+              createAt: moment(),
             },
           })
         );
