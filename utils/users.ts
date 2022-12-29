@@ -23,7 +23,14 @@ async function userJoin(socket: WebSocket, userId: string) {
       { 1: user.socket.id, 2: user.userId }
     );
     console.log("El usuario ya estaba en línea, actualizando socket...");
-    await client.end();
+    try {
+      connectedClients.set(user.userId, socket);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      console.log("Socket del usuario actualizado.");
+      await client.end();
+    }
     return;
   }
 
